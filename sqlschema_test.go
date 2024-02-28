@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"testing"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -22,10 +23,12 @@ func TestSchemaReflect(t *testing.T) {
 	data := &struct {
 		ID      int                    `db:"id pk ai int(11)"`
 		Name    string                 `db:"name unique varchar(255)"`
-		Age     int                    `db:"age def(0) int(11)"`
-		Idx1    int                    `db:"idx1 unique(idx)"`
-		Idx2    int                    `db:"idx2 unique(idx)"`
+		Age     int                    `db:"age def(0) int(11) unique(idx2)"`
+		Idx1    int                    `db:"idx1 unique(idx1) unique(idx2)"`
+		Idx2    int                    `db:"idx2 unique(idx1)"`
 		Comment string                 `db:"comment null"`
+		Ts      time.Time              `db:"ts datetime"`
+		Ta      time.Time              `db:"ta timestamp"`
 		Arr     []string               `db:"arr text arr(,)"`
 		Json    map[string]interface{} `db:"json text json"`
 		Yaml    map[string]interface{} `db:"yaml text yaml"`
@@ -55,6 +58,8 @@ func TestSchemaReflect(t *testing.T) {
 		"foo": "bar",
 		"bar": 123,
 	}
+	data.Ts = time.Now()
+	data.Ta = time.Now()
 	if e := Insert(context.Background(), db, "test2", data); e != nil {
 		t.Error(e)
 	}
@@ -69,10 +74,12 @@ func TestSchemaReflectScan(t *testing.T) {
 	data := &struct {
 		ID      int                    `db:"id pk ai int(11)"`
 		Name    string                 `db:"name unique varchar(255)"`
-		Age     int                    `db:"age def(0) int(11)"`
-		Idx1    int                    `db:"idx1 unique(idx)"`
-		Idx2    int                    `db:"idx2 unique(idx)"`
+		Age     int                    `db:"age def(0) int(11) unique(idx2)"`
+		Idx1    int                    `db:"idx1 unique(idx1) unique(idx2)"`
+		Idx2    int                    `db:"idx2 unique(idx1)"`
 		Comment string                 `db:"comment null"`
+		Ts      time.Time              `db:"ts datetime"`
+		Ta      time.Time              `db:"ta timestamp"`
 		Arr     []string               `db:"arr text arr(,)"`
 		Json    map[string]interface{} `db:"json text json"`
 		Yaml    map[string]interface{} `db:"yaml text yaml"`
@@ -96,7 +103,7 @@ func TestSchemaReflectScan(t *testing.T) {
 func TestSchemeUpdate(t *testing.T) {
 	sc := &Schema{
 		Name: "test",
-		Fields: []Field{
+		Fields: []*Field{
 			{
 				Name:          "id",
 				Type:          "int(11)",
@@ -126,7 +133,7 @@ func TestSchemeUpdate(t *testing.T) {
 				Comment:      "0 for Unknown, \"1\" for Male, '2' for Female, '3' for Other",
 			},
 		},
-		Indices: []Index{
+		Indices: []*Index{
 			{
 				Columns: []string{"id"},
 				Primary: true,

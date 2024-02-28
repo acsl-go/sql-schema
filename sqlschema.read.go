@@ -13,7 +13,7 @@ func ReadFromDB(db *sql.DB, ctx context.Context, name string) (*Schema, error) {
 		return nil, errors.Wrap(e, "Get database name failed")
 	}
 
-	sc := &Schema{Name: name, Fields: make([]Field, 0), Indices: make([]Index, 0)}
+	sc := &Schema{Name: name, Fields: make([]*Field, 0), Indices: make([]*Index, 0)}
 	if e := db.QueryRowContext(ctx, "SELECT `ENGINE`,`TABLE_COLLATION`,`TABLE_COMMENT` FROM `information_schema`.`TABLES` WHERE `TABLE_SCHEMA` = ? AND `TABLE_NAME` = ?", dbName, name).Scan(&sc.Engine, &sc.Collate, &sc.Comment); e != nil {
 		if e == sql.ErrNoRows {
 			return nil, nil
@@ -42,7 +42,7 @@ func ReadFromDB(db *sql.DB, ctx context.Context, name string) (*Schema, error) {
 		if defaultValue.Valid {
 			field.DefaultValue = defaultValue.String
 		}
-		sc.Fields = append(sc.Fields, field)
+		sc.Fields = append(sc.Fields, &field)
 	}
 
 	rows, e = db.QueryContext(ctx, "SELECT `INDEX_NAME`,`SEQ_IN_INDEX`,`COLUMN_NAME`,`NON_UNIQUE` FROM `information_schema`.`STATISTICS` WHERE `TABLE_SCHEMA` = ? AND `TABLE_NAME` = ?", dbName, name)
@@ -68,7 +68,7 @@ func ReadFromDB(db *sql.DB, ctx context.Context, name string) (*Schema, error) {
 			} else if nonUnique == 0 {
 				index.Unique = true
 			}
-			sc.Indices = append(sc.Indices, index)
+			sc.Indices = append(sc.Indices, &index)
 		} else {
 			sc.Indices[i].Columns = append(sc.Indices[i].Columns, idxColumn)
 		}

@@ -18,8 +18,8 @@ type Index struct {
 
 type Schema struct {
 	Name    string
-	Fields  []Field
-	Indices []Index
+	Fields  []*Field
+	Indices []*Index
 	Engine  string
 	Collate string
 	Comment string
@@ -28,7 +28,7 @@ type Schema struct {
 func (sc *Schema) Field(name string) *Field {
 	for _, field := range sc.Fields {
 		if field.Name == name {
-			return &field
+			return field
 		}
 	}
 	return nil
@@ -40,7 +40,7 @@ func (sc *Schema) Index(name string) *Index {
 	}
 	for _, index := range sc.Indices {
 		if index.Name == name || (name == "" && index.Primary) {
-			return &index
+			return index
 		}
 	}
 	return nil

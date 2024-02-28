@@ -65,6 +65,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
@@ -85,20 +86,28 @@ const (
 	PRIMARY_KEY = 3
 )
 
+var (
+	timeTypeKind = reflect.TypeOf(time.Time{}).Kind()
+)
+
+type dataSchemaFieldIndex struct {
+	IndexType uint8  // pk | index | unique
+	IndexName string // index name
+}
+
 type dataSchemaField struct {
 	Name               string       // Name of the field in struct
 	FieldType          reflect.Kind // Type of the field
-	FieldIndex         int
-	ColumnName         string // Name of the column in database
-	IsPrimaryKey       bool   // pk
-	IsAutoincrement    bool   // ai
-	IsNullable         bool   // null
-	DataStoreType      string // column_type
-	DefaultValue       string // def()
-	SerializeMethod    uint8  // arr | json | yaml
-	SerializeDelimiter string // delimiter
-	IndexType          uint8  // pk | index | unique
-	indexName          string // index name
+	FieldIndex         int          // Field index of the struct
+	ColumnName         string       // Name of the column in database
+	IsPrimaryKey       bool         // pk
+	IsAutoincrement    bool         // ai
+	IsNullable         bool         // null
+	DataStoreType      string       // column_type
+	DefaultValue       string       // def()
+	SerializeMethod    uint8        // arr | json | yaml
+	SerializeDelimiter string       // delimiter
+	Indices            []*dataSchemaFieldIndex
 	Comment            string // comment()
 }
 
@@ -152,8 +161,7 @@ func parseFieldTag(field *dataSchemaField, tag string) {
 		switch option {
 		case "pk":
 			field.IsPrimaryKey = true
-			field.IndexType = PRIMARY_KEY
-			field.indexName = "PRIMARY"
+			field.Indices = append(field.Indices, &dataSchemaFieldIndex{IndexType: PRIMARY_KEY, IndexName: "PRIMARY"})
 		case "ai":
 			field.IsAutoincrement = true
 		case "null":
@@ -170,11 +178,15 @@ func parseFieldTag(field *dataSchemaField, tag string) {
 		case "yaml":
 			field.SerializeMethod = YAML
 		case "unique":
-			field.IndexType = UNIQUE
-			field.indexName = param
+			if param == "" {
+				param = "idx_" + field.Name
+			}
+			field.Indices = append(field.Indices, &dataSchemaFieldIndex{IndexType: UNIQUE, IndexName: param})
 		case "index":
-			field.IndexType = INDEX
-			field.indexName = param
+			if param == "" {
+				param = "idx_" + field.Name
+			}
+			field.Indices = append(field.Indices, &dataSchemaFieldIndex{IndexType: INDEX, IndexName: param})
 		case "comment":
 			field.Comment = param
 		case "tinyint":
@@ -234,9 +246,6 @@ func parseFieldTag(field *dataSchemaField, tag string) {
 			field.DataStoreType = "datetime"
 		}
 	}
-	if field.IndexType != NONE && field.indexName == "" {
-		field.indexName = "idx_" + field.Name
-	}
 }
 
 func loadDataSchemaInfo(v reflect.Type) *dataSchemaInfo {
@@ -254,6 +263,7 @@ func loadDataSchemaInfo(v reflect.Type) *dataSchemaInfo {
 				Name:       field.Name,
 				FieldType:  field.Type.Kind(),
 				FieldIndex: i,
+				Indices:    make([]*dataSchemaFieldIndex, 0),
 			}
 			parseFieldTag(info.Fields[i], tag)
 			if info.Fields[i].ColumnName == "" {
@@ -281,6 +291,8 @@ func loadDataSchemaInfo(v reflect.Type) *dataSchemaInfo {
 					} else {
 						info.Fields[i].DataStoreType = "mediumtext"
 					}
+				case timeTypeKind:
+					info.Fields[i].DataStoreType = "datetime"
 				default:
 					info.Fields[i].DataStoreType = "int"
 				}
@@ -313,15 +325,15 @@ func GetSchema(v any) *Schema {
 	schema := loadDataSchemaInfo(reflect.TypeOf(elem.Interface()))
 
 	ret := &Schema{
-		Fields:  make([]Field, 0, len(schema.Fields)),
-		Indices: make([]Index, 0, len(schema.Fields)),
+		Fields:  make([]*Field, 0, len(schema.Fields)),
+		Indices: make([]*Index, 0, len(schema.Fields)),
 	}
 	for i := 0; i < len(schema.Fields); i++ {
 		field := schema.Fields[i]
 		if field == nil {
 			continue
 		}
-		ret.Fields = append(ret.Fields, Field{
+		ret.Fields = append(ret.Fields, &Field{
 			Name:          field.ColumnName,
 			Type:          field.DataStoreType,
 			Nullable:      field.IsNullable,
@@ -330,21 +342,23 @@ func GetSchema(v any) *Schema {
 			Comment:       field.Comment,
 		})
 
-		if field.IndexType != NONE {
-			for j := 0; j < len(ret.Indices); j++ {
-				index := &ret.Indices[j]
-				if index.Name == field.indexName {
-					index.Columns = append(index.Columns, field.ColumnName)
-					goto indexDone
+		for _, indexDecl := range field.Indices {
+			ok := false
+			for _, indexItem := range ret.Indices {
+				if indexItem.Name == indexDecl.IndexName {
+					indexItem.Columns = append(indexItem.Columns, field.ColumnName)
+					ok = true
+					break
 				}
 			}
-			ret.Indices = append(ret.Indices, Index{
-				Name:    field.indexName,
-				Primary: field.IndexType == PRIMARY_KEY,
-				Unique:  field.IndexType == UNIQUE,
-				Columns: []string{field.ColumnName},
-			})
-		indexDone:
+			if !ok {
+				ret.Indices = append(ret.Indices, &Index{
+					Name:    indexDecl.IndexName,
+					Primary: indexDecl.IndexType == PRIMARY_KEY,
+					Unique:  indexDecl.IndexType == UNIQUE,
+					Columns: []string{field.ColumnName},
+				})
+			}
 		}
 	}
 	return ret

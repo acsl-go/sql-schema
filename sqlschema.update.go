@@ -53,7 +53,7 @@ func (sc *Schema) Update(db *sql.DB, ctx context.Context) error {
 		sql = ""
 		if fd == nil {
 			sql = "ALTER TABLE `" + sc.Name + "` ADD `" + field.Name + "` " + field.Type
-		} else if !fd.Equal(&field) {
+		} else if !fd.Equal(field) {
 			sql = "ALTER TABLE `" + sc.Name + "` MODIFY `" + field.Name + "` " + field.Type
 		}
 		if sql != "" {
@@ -99,7 +99,7 @@ func (sc *Schema) Update(db *sql.DB, ctx context.Context) error {
 			} else {
 				sql = "ALTER TABLE `" + sc.Name + "` ADD KEY `" + index.Name + "` ("
 			}
-		} else if !idx.Equal(&index) {
+		} else if !idx.Equal(index) {
 			if index.Primary {
 				sql = "ALTER TABLE `" + sc.Name + "` DROP PRIMARY KEY, ADD PRIMARY KEY ("
 			} else if index.Unique {
